@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Nothing yet!
+
+## [4.0.0-beta.1] - 2024-11-21
+
+### Added
+
+- _Upgrade (experimental)_: Drop unnecessary `opacity` theme values when migrating to CSS ([#15067](https://github.com/tailwindlabs/tailwindcss/pull/15067))
+
+### Fixed
+
+- Ensure `opacity` theme values configured as decimal numbers via JS config files work with color utilities ([#15067](https://github.com/tailwindlabs/tailwindcss/pull/15067))
+- Bring back support for `decoration-clone`, `decoration-slice`, `overflow-ellipsis`, `flex-grow-*`, and `flex-shrink-*` ([#15069](https://github.com/tailwindlabs/tailwindcss/pull/15069))
+- _Upgrade (experimental)_: Include `color` in the form reset snippet ([#15064](https://github.com/tailwindlabs/tailwindcss/pull/15064))
+
+## [4.0.0-alpha.36] - 2024-11-21
+
+### Added
+
+- Add consistent base styles for buttons and form controls ([#15036](https://github.com/tailwindlabs/tailwindcss/pull/15036))
+- _Upgrade (experimental)_: Convert `group-[]:flex` to `in-[.group]:flex` ([#15054](https://github.com/tailwindlabs/tailwindcss/pull/15054))
+- _Upgrade (experimental)_: Add form reset styles to CSS files for compatibility with v3 ([#15036](https://github.com/tailwindlabs/tailwindcss/pull/15036))
+- _Upgrade (experimental)_: Migrate `ring` to `ring-3` ([#15063](https://github.com/tailwindlabs/tailwindcss/pull/15063))
+
+### Fixed
+
+- _Upgrade (experimental)_: Don't migrate arbitrary variants to `in-*` that use the child combinator instead of the descendant combinator ([#15054](https://github.com/tailwindlabs/tailwindcss/pull/15054))
+
+### Changed
+
+- Use single drop shadow values instead of multiple ([#15056](https://github.com/tailwindlabs/tailwindcss/pull/15056))
+- Do not parse invalid candidates with empty arbitrary values ([#15055](https://github.com/tailwindlabs/tailwindcss/pull/15055))
+
+## [4.0.0-alpha.35] - 2024-11-20
+
 ### Added
 
 - Reintroduce `max-w-screen-*` utilities that read from the `--breakpoint` namespace as deprecated utilities ([#15013](https://github.com/tailwindlabs/tailwindcss/pull/15013))
@@ -15,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundle `@tailwindcss/forms`, `@tailwindcss/typography`, and `@tailwindcss/aspect-ratio` with the standalone CLI ([#15028](https://github.com/tailwindlabs/tailwindcss/pull/15028))
 - Allow `addUtilities()` and `addComponents()` to work with child combinators and other complex selectors ([#15029](https://github.com/tailwindlabs/tailwindcss/pull/15029))
 - Support colors that use `<alpha-value>` in JS configs and plugins ([#15033](https://github.com/tailwindlabs/tailwindcss/pull/15033))
+- Add new `transition-discrete` and `transition-normal` utilities for `transition-behavior` ([#15051](https://github.com/tailwindlabs/tailwindcss/pull/15051))
 - _Upgrade (experimental)_: Migrate `[&>*]` to the `*` variant ([#15022](https://github.com/tailwindlabs/tailwindcss/pull/15022))
 - _Upgrade (experimental)_: Migrate `[&_*]` to the `**` variant ([#15022](https://github.com/tailwindlabs/tailwindcss/pull/15022))
 - _Upgrade (experimental)_: Warn when trying to migrating a project that is not on Tailwind CSS v3 ([#15015](https://github.com/tailwindlabs/tailwindcss/pull/15015))
