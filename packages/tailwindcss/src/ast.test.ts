@@ -1,9 +1,10 @@
 import { expect, it } from 'vitest'
-import { context, decl, styleRule, toCss, walk } from './ast'
+import { context, decl, optimizeAst, styleRule, toCss, walk, WalkAction } from './ast'
 import * as CSS from './css-parser'
 
 it('should pretty print an AST', () => {
-  expect(toCss(CSS.parse('.foo{color:red;&:hover{color:blue;}}'))).toMatchInlineSnapshot(`
+  expect(toCss(optimizeAst(CSS.parse('.foo{color:red;&:hover{color:blue;}}'))))
+    .toMatchInlineSnapshot(`
     ".foo {
       color: red;
       &:hover {
@@ -51,7 +52,7 @@ it('allows the placement of context nodes', () => {
   expect(blueContext).toEqual({ context: 'a' })
   expect(greenContext).toEqual({ context: 'b' })
 
-  expect(toCss(ast)).toMatchInlineSnapshot(`
+  expect(toCss(optimizeAst(ast))).toMatchInlineSnapshot(`
     ".foo {
       color: red;
     }
@@ -62,5 +63,35 @@ it('allows the placement of context nodes', () => {
       }
     }
     "
+  `)
+})
+
+it('should stop walking when returning `WalkAction.Stop`', () => {
+  let ast = [
+    styleRule('.foo', [styleRule('.nested', [styleRule('.bail', [decl('color', 'red')])])]),
+    styleRule('.bar'),
+    styleRule('.baz'),
+    styleRule('.qux'),
+  ]
+
+  let seen = new Set()
+
+  walk(ast, (node) => {
+    if (node.kind === 'rule') {
+      seen.add(node.selector)
+    }
+
+    if (node.kind === 'rule' && node.selector === '.bail') {
+      return WalkAction.Stop
+    }
+  })
+
+  // We do not want to see `.bar`, `.baz`, or `.qux` because we bailed early
+  expect(seen).toMatchInlineSnapshot(`
+    Set {
+      ".foo",
+      ".nested",
+      ".bail",
+    }
   `)
 })

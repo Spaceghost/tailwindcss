@@ -1,3 +1,4 @@
+import { Features } from '..'
 import { styleRule, toCss, walk, WalkAction, type AstNode } from '../ast'
 import type { DesignSystem } from '../design-system'
 import { segment } from '../utils/segment'
@@ -32,8 +33,10 @@ export async function applyCompatibilityHooks({
   ) => Promise<{ module: any; base: string }>
   globs: { origin?: string; pattern: string }[]
 }) {
-  let pluginPaths: [{ id: string; base: string }, CssPluginOptions | null][] = []
-  let configPaths: { id: string; base: string }[] = []
+  let features = Features.None
+  let pluginPaths: [{ id: string; base: string; reference: boolean }, CssPluginOptions | null][] =
+    []
+  let configPaths: { id: string; base: string; reference: boolean }[] = []
 
   walk(ast, (node, { parent, replaceWith, context }) => {
     if (node.kind !== 'at-rule') return
@@ -93,11 +96,12 @@ export async function applyCompatibilityHooks({
       }
 
       pluginPaths.push([
-        { id: pluginPath, base: context.base },
+        { id: pluginPath, base: context.base as string, reference: !!context.reference },
         Object.keys(options).length > 0 ? options : null,
       ])
 
       replaceWith([])
+      features |= Features.JsPluginCompat
       return
     }
 
@@ -111,8 +115,13 @@ export async function applyCompatibilityHooks({
         throw new Error('`@config` cannot be nested.')
       }
 
-      configPaths.push({ id: node.params.slice(1, -1), base: context.base })
+      configPaths.push({
+        id: node.params.slice(1, -1),
+        base: context.base as string,
+        reference: !!context.reference,
+      })
       replaceWith([])
+      features |= Features.JsPluginCompat
       return
     }
   })
@@ -132,7 +141,7 @@ export async function applyCompatibilityHooks({
 
     // If the theme value is not found in the simple resolver, we upgrade to the full backward
     // compatibility support implementation of the `resolveThemeValue` function.
-    upgradeToFullPluginSupport({
+    features |= upgradeToFullPluginSupport({
       designSystem,
       base,
       ast,
@@ -145,33 +154,35 @@ export async function applyCompatibilityHooks({
 
   // If there are no plugins or configs registered, we don't need to register
   // any additional backwards compatibility hooks.
-  if (!pluginPaths.length && !configPaths.length) return
+  if (!pluginPaths.length && !configPaths.length) return Features.None
 
   let [configs, pluginDetails] = await Promise.all([
     Promise.all(
-      configPaths.map(async ({ id, base }) => {
+      configPaths.map(async ({ id, base, reference }) => {
         let loaded = await loadModule(id, base, 'config')
         return {
           path: id,
           base: loaded.base,
           config: loaded.module as UserConfig,
+          reference,
         }
       }),
     ),
     Promise.all(
-      pluginPaths.map(async ([{ id, base }, pluginOptions]) => {
+      pluginPaths.map(async ([{ id, base, reference }, pluginOptions]) => {
         let loaded = await loadModule(id, base, 'plugin')
         return {
           path: id,
           base: loaded.base,
           plugin: loaded.module as Plugin,
           options: pluginOptions,
+          reference,
         }
       }),
     ),
   ])
 
-  upgradeToFullPluginSupport({
+  features |= upgradeToFullPluginSupport({
     designSystem,
     base,
     ast,
@@ -179,6 +190,8 @@ export async function applyCompatibilityHooks({
     configs,
     pluginDetails,
   })
+
+  return features
 }
 
 function upgradeToFullPluginSupport({
@@ -197,21 +210,32 @@ function upgradeToFullPluginSupport({
     path: string
     base: string
     config: UserConfig
+    reference: boolean
   }[]
   pluginDetails: {
     path: string
     base: string
     plugin: Plugin
     options: CssPluginOptions | null
+    reference: boolean
   }[]
 }) {
+  let features = Features.None
   let pluginConfigs = pluginDetails.map((detail) => {
     if (!detail.options) {
-      return { config: { plugins: [detail.plugin] }, base: detail.base }
+      return {
+        config: { plugins: [detail.plugin] },
+        base: detail.base,
+        reference: detail.reference,
+      }
     }
 
     if ('__isOptionsFunction' in detail.plugin) {
-      return { config: { plugins: [detail.plugin(detail.options)] }, base: detail.base }
+      return {
+        config: { plugins: [detail.plugin(detail.options)] },
+        base: detail.base,
+        reference: detail.reference,
+      }
     }
 
     throw new Error(`The plugin "${detail.path}" does not accept options`)
@@ -220,19 +244,23 @@ function upgradeToFullPluginSupport({
   let userConfig = [...pluginConfigs, ...configs]
 
   let { resolvedConfig } = resolveConfig(designSystem, [
-    { config: createCompatConfig(designSystem.theme), base },
+    { config: createCompatConfig(designSystem.theme), base, reference: true },
     ...userConfig,
-    { config: { plugins: [darkModePlugin] }, base },
+    { config: { plugins: [darkModePlugin] }, base, reference: true },
   ])
   let { resolvedConfig: resolvedUserConfig, replacedThemeKeys } = resolveConfig(
     designSystem,
     userConfig,
   )
 
-  let pluginApi = buildPluginApi(designSystem, ast, resolvedConfig)
+  let pluginApi = buildPluginApi(designSystem, ast, resolvedConfig, {
+    set current(value: number) {
+      features |= value
+    },
+  })
 
-  for (let { handler } of resolvedConfig.plugins) {
-    handler(pluginApi)
+  for (let { handler, reference } of resolvedConfig.plugins) {
+    handler(reference ? { ...pluginApi, addBase: () => {} } : pluginApi)
   }
 
   // Merge the user-configured theme keys into the design system. The compat
@@ -323,4 +351,5 @@ function upgradeToFullPluginSupport({
 
     globs.push(file)
   }
+  return features
 }

@@ -6,6 +6,7 @@ import {
   comment,
   context as contextNode,
   decl,
+  optimizeAst,
   rule,
   styleRule,
   toCss,
@@ -69,17 +70,47 @@ function parseThemeOptions(params: string) {
   return [options, prefix] as const
 }
 
+type Root =
+  // Unknown root
+  | null
+
+  // Explicitly no root specified via `source(none)`
+  | 'none'
+
+  // Specified via `source(…)`, relative to the `base`
+  | { base: string; pattern: string }
+
+export const enum Features {
+  None = 0,
+
+  // `@apply` was used
+  AtApply = 1 << 0,
+
+  // `@import` was used
+  AtImport = 1 << 1,
+
+  // `@plugin` or `@config` was used
+  JsPluginCompat = 1 << 2,
+
+  // `theme(…)` was used
+  ThemeFunction = 1 << 3,
+
+  // `@tailwind utilities` was used
+  Utilities = 1 << 4,
+}
+
 async function parseCss(
-  css: string,
+  ast: AstNode[],
   {
     base = '',
     loadModule = throwOnLoadModule,
     loadStylesheet = throwOnLoadStylesheet,
   }: CompileOptions = {},
 ) {
-  let ast = [contextNode({ base }, CSS.parse(css))] as AstNode[]
+  let features = Features.None
+  ast = [contextNode({ base }, ast)] as AstNode[]
 
-  await substituteAtImports(ast, base, loadStylesheet)
+  features |= await substituteAtImports(ast, base, loadStylesheet)
 
   let important = null as boolean | null
   let theme = new Theme()
@@ -88,11 +119,7 @@ async function parseCss(
   let firstThemeRule = null as StyleRule | null
   let utilitiesNode = null as AtRule | null
   let globs: { base: string; pattern: string }[] = []
-  let root:
-    | null // Unknown root
-    | 'none' // Explicitly no root specified via `source(none)`
-    // Specified via `source(…)`, relative to the `base`
-    | { base: string; pattern: string } = null
+  let root = null as Root
 
   // Handle at-rules
   walk(ast, (node, { parent, replaceWith, context }) => {
@@ -131,13 +158,14 @@ async function parseCss(
           }
 
           root = {
-            base: context.sourceBase ?? context.base,
+            base: (context.sourceBase as string) ?? (context.base as string),
             pattern: path.slice(1, -1),
           }
         }
       }
 
       utilitiesNode = node
+      features |= Features.Utilities
     }
 
     // Collect custom `@utility` at-rules
@@ -185,7 +213,7 @@ async function parseCss(
       ) {
         throw new Error('`@source` paths must be quoted.')
       }
-      globs.push({ base: context.base, pattern: path.slice(1, -1) })
+      globs.push({ base: context.base as string, pattern: path.slice(1, -1) })
       replaceWith([])
       return
     }
@@ -337,6 +365,37 @@ async function parseCss(
           important = true
         }
 
+        // Handle `@import "…" reference`
+        else if (param === 'reference') {
+          walk(node.nodes, (child, { replaceWith }) => {
+            if (child.kind !== 'at-rule') {
+              replaceWith([])
+              return WalkAction.Skip
+            }
+            switch (child.name) {
+              case '@theme': {
+                let themeParams = segment(child.params, ' ')
+                if (!themeParams.includes('reference')) {
+                  child.params = (child.params === '' ? '' : ' ') + 'reference'
+                }
+                return WalkAction.Skip
+              }
+              case '@import':
+              case '@config':
+              case '@plugin':
+              case '@variant':
+              case '@utility': {
+                return WalkAction.Skip
+              }
+
+              // Other at-rules, like `@media`, `@supports`, or `@layer` should
+              // be recursively traversed as these might be inserted by the
+              // `@import` resolution.
+            }
+          })
+          node.nodes = [contextNode({ reference: true }, node.nodes)]
+        }
+
         //
         else {
           unknownParams.push(param)
@@ -414,7 +473,13 @@ async function parseCss(
   // of random arguments because it really just needs access to "the world" to
   // do whatever ungodly things it needs to do to make things backwards
   // compatible without polluting core.
-  await applyCompatibilityHooks({ designSystem, base, ast, loadModule, globs })
+  features |= await applyCompatibilityHooks({
+    designSystem,
+    base,
+    ast,
+    loadModule,
+    globs,
+  })
 
   for (let customVariant of customVariants) {
     customVariant(designSystem)
@@ -464,9 +529,9 @@ async function parseCss(
   }
 
   // Replace `@apply` rules with the actual utility classes.
-  substituteAtApply(ast, designSystem)
+  features |= substituteAtApply(ast, designSystem)
 
-  substituteFunctions(ast, designSystem.resolveThemeValue)
+  features |= substituteFunctions(ast, designSystem.resolveThemeValue)
 
   // Remove `@utility`, we couldn't replace it before yet because we had to
   // handle the nested `@apply` at-rules first.
@@ -488,21 +553,20 @@ async function parseCss(
     globs,
     root,
     utilitiesNode,
+    features,
   }
 }
 
-export async function compile(
-  css: string,
+export async function compileAst(
+  input: AstNode[],
   opts: CompileOptions = {},
 ): Promise<{
   globs: { base: string; pattern: string }[]
-  root:
-    | null // Unknown root
-    | 'none' // Explicitly no root specified via `source(none)`
-    | { base: string; pattern: string } // Specified via `source(…)`, relative to the `base`
-  build(candidates: string[]): string
+  root: Root
+  features: Features
+  build(candidates: string[]): AstNode[]
 }> {
-  let { designSystem, ast, globs, root, utilitiesNode } = await parseCss(css, opts)
+  let { designSystem, ast, globs, root, utilitiesNode, features } = await parseCss(input, opts)
 
   if (process.env.NODE_ENV !== 'test') {
     ast.unshift(comment(`! tailwindcss v${version} | MIT License | https://tailwindcss.com `))
@@ -517,13 +581,23 @@ export async function compile(
   // resulted in a generated AST Node. All the other `rawCandidates` are invalid
   // and should be ignored.
   let allValidCandidates = new Set<string>()
-  let compiledCss = toCss(ast)
+  let compiled = null as AstNode[] | null
   let previousAstNodeCount = 0
 
   return {
     globs,
     root,
+    features,
     build(newRawCandidates: string[]) {
+      if (features === Features.None) {
+        return input
+      }
+
+      if (!utilitiesNode) {
+        compiled ??= optimizeAst(ast)
+        return compiled
+      }
+
       let didChange = false
 
       // Add all new candidates unless we know that they are invalid.
@@ -538,26 +612,57 @@ export async function compile(
       // If no new candidates were added, we can return the original CSS. This
       // currently assumes that we only add new candidates and never remove any.
       if (!didChange) {
+        compiled ??= optimizeAst(ast)
+        return compiled
+      }
+
+      let newNodes = compileCandidates(allValidCandidates, designSystem, {
+        onInvalidCandidate,
+      }).astNodes
+
+      // If no new ast nodes were generated, then we can return the original
+      // CSS. This currently assumes that we only add new ast nodes and never
+      // remove any.
+      if (previousAstNodeCount === newNodes.length) {
+        compiled ??= optimizeAst(ast)
+        return compiled
+      }
+
+      previousAstNodeCount = newNodes.length
+
+      utilitiesNode.nodes = newNodes
+
+      compiled = optimizeAst(ast)
+      return compiled
+    },
+  }
+}
+
+export async function compile(
+  css: string,
+  opts: CompileOptions = {},
+): Promise<{
+  globs: { base: string; pattern: string }[]
+  root: Root
+  features: Features
+  build(candidates: string[]): string
+}> {
+  let ast = CSS.parse(css)
+  let api = await compileAst(ast, opts)
+  let compiledAst = ast
+  let compiledCss = css
+
+  return {
+    ...api,
+    build(newCandidates) {
+      let newAst = api.build(newCandidates)
+
+      if (newAst === compiledAst) {
         return compiledCss
       }
 
-      if (utilitiesNode) {
-        let newNodes = compileCandidates(allValidCandidates, designSystem, {
-          onInvalidCandidate,
-        }).astNodes
-
-        // If no new ast nodes were generated, then we can return the original
-        // CSS. This currently assumes that we only add new ast nodes and never
-        // remove any.
-        if (previousAstNodeCount === newNodes.length) {
-          return compiledCss
-        }
-
-        previousAstNodeCount = newNodes.length
-
-        utilitiesNode.nodes = newNodes
-        compiledCss = toCss(ast)
-      }
+      compiledCss = toCss(newAst)
+      compiledAst = newAst
 
       return compiledCss
     },
@@ -565,7 +670,7 @@ export async function compile(
 }
 
 export async function __unstable__loadDesignSystem(css: string, opts: CompileOptions = {}) {
-  let result = await parseCss(css, opts)
+  let result = await parseCss(CSS.parse(css), opts)
   return result.designSystem
 }
 

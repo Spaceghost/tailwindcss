@@ -1,10 +1,9 @@
-import { compile, env, normalizePath } from '@tailwindcss/node'
+import { compile, env, Features, normalizePath } from '@tailwindcss/node'
 import { clearRequireCache } from '@tailwindcss/node/require-cache'
 import { Scanner } from '@tailwindcss/oxide'
-import { Features, transform } from 'lightningcss'
+import { Features as LightningCssFeatures, transform } from 'lightningcss'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { sveltePreprocess } from 'svelte-preprocess'
 import type { Plugin, ResolvedConfig, Rollup, Update, ViteDevServer } from 'vite'
 
 const SPECIAL_QUERY_RE = /[?&](raw|url)\b/
@@ -35,9 +34,31 @@ export default function tailwindcss(): Plugin[] {
   let moduleGraphCandidates = new DefaultMap<string, Set<string>>(() => new Set<string>())
   let moduleGraphScanner = new Scanner({})
 
-  let roots: DefaultMap<string, Root> = new DefaultMap(
-    (id) => new Root(id, () => moduleGraphCandidates, config!.base),
-  )
+  let roots: DefaultMap<string, Root> = new DefaultMap((id) => {
+    let cssResolver = config!.createResolver({
+      ...config!.resolve,
+      extensions: ['.css'],
+      mainFields: ['style'],
+      conditions: ['style', 'development|production'],
+      tryIndex: false,
+      preferRelative: true,
+    })
+    function customCssResolver(id: string, base: string) {
+      return cssResolver(id, base, true, isSSR)
+    }
+
+    let jsResolver = config!.createResolver(config!.resolve)
+    function customJsResolver(id: string, base: string) {
+      return jsResolver(id, base, true, isSSR)
+    }
+    return new Root(
+      id,
+      () => moduleGraphCandidates,
+      config!.base,
+      customCssResolver,
+      customJsResolver,
+    )
+  })
 
   function scanFile(id: string, content: string, extension: string, isSSR: boolean) {
     let updated = false
@@ -338,10 +359,13 @@ function optimizeCss(
       nonStandard: {
         deepSelectorCombinator: true,
       },
-      include: Features.Nesting,
-      exclude: Features.LogicalProperties,
+      include: LightningCssFeatures.Nesting,
+      exclude: LightningCssFeatures.LogicalProperties,
       targets: {
         safari: (16 << 16) | (4 << 8),
+        ios_saf: (16 << 16) | (4 << 8),
+        firefox: 128 << 16,
+        chrome: 120 << 16,
       },
       errorRecovery: true,
     }).code
@@ -420,6 +444,9 @@ class Root {
     private id: string,
     private getSharedCandidates: () => Map<string, Set<string>>,
     private base: string,
+
+    private customCssResolver: (id: string, base: string) => Promise<string | false | undefined>,
+    private customJsResolver: (id: string, base: string) => Promise<string | false | undefined>,
   ) {}
 
   // Generate the CSS for the root file. This can return false if the file is
@@ -445,6 +472,9 @@ class Root {
           addWatchFile(path)
           this.dependencies.add(path)
         },
+
+        customCssResolver: this.customCssResolver,
+        customJsResolver: this.customJsResolver,
       })
       env.DEBUG && console.timeEnd('[@tailwindcss/vite] Setup compiler')
 
@@ -466,7 +496,16 @@ class Root {
       this.scanner = new Scanner({ sources })
     }
 
-    if (!this.overwriteCandidates) {
+    if (
+      !(
+        this.compiler.features &
+        (Features.AtApply | Features.JsPluginCompat | Features.ThemeFunction | Features.Utilities)
+      )
+    ) {
+      return false
+    }
+
+    if (!this.overwriteCandidates || this.compiler.features & Features.Utilities) {
       // This should not be here, but right now the Vite plugin is setup where we
       // setup a new scanner and compiler every time we request the CSS file
       // (regardless whether it actually changed or not).
@@ -477,44 +516,46 @@ class Root {
       env.DEBUG && console.timeEnd('[@tailwindcss/vite] Scan for candidates')
     }
 
-    // Watch individual files found via custom `@source` paths
-    for (let file of this.scanner.files) {
-      addWatchFile(file)
-    }
-
-    // Watch globs found via custom `@source` paths
-    for (let glob of this.scanner.globs) {
-      if (glob.pattern[0] === '!') continue
-
-      let relative = path.relative(this.base, glob.base)
-      if (relative[0] !== '.') {
-        relative = './' + relative
+    if (this.compiler.features & Features.Utilities) {
+      // Watch individual files found via custom `@source` paths
+      for (let file of this.scanner.files) {
+        addWatchFile(file)
       }
-      // Ensure relative is a posix style path since we will merge it with the
-      // glob.
-      relative = normalizePath(relative)
 
-      addWatchFile(path.posix.join(relative, glob.pattern))
+      // Watch globs found via custom `@source` paths
+      for (let glob of this.scanner.globs) {
+        if (glob.pattern[0] === '!') continue
 
-      let root = this.compiler.root
-
-      if (root !== 'none' && root !== null) {
-        let basePath = normalizePath(path.resolve(root.base, root.pattern))
-
-        let isDir = await fs.stat(basePath).then(
-          (stats) => stats.isDirectory(),
-          () => false,
-        )
-
-        if (!isDir) {
-          throw new Error(
-            `The path given to \`source(…)\` must be a directory but got \`source(${basePath})\` instead.`,
-          )
+        let relative = path.relative(this.base, glob.base)
+        if (relative[0] !== '.') {
+          relative = './' + relative
         }
+        // Ensure relative is a posix style path since we will merge it with the
+        // glob.
+        relative = normalizePath(relative)
 
-        this.basePath = basePath
-      } else if (root === null) {
-        this.basePath = null
+        addWatchFile(path.posix.join(relative, glob.pattern))
+
+        let root = this.compiler.root
+
+        if (root !== 'none' && root !== null) {
+          let basePath = normalizePath(path.resolve(root.base, root.pattern))
+
+          let isDir = await fs.stat(basePath).then(
+            (stats) => stats.isDirectory(),
+            () => false,
+          )
+
+          if (!isDir) {
+            throw new Error(
+              `The path given to \`source(…)\` must be a directory but got \`source(${basePath})\` instead.`,
+            )
+          }
+
+          this.basePath = basePath
+        } else if (root === null) {
+          this.basePath = null
+        }
       }
     }
 
@@ -567,8 +608,8 @@ class Root {
   }
 }
 
-// Register a plugin that can hook into the Svelte preprocessor if svelte is
-// enabled. This allows us to transform CSS in `<style>` tags and create a
+// Register a plugin that can hook into the Svelte preprocessor if Svelte is
+// configured. This allows us to transform CSS in `<style>` tags and create a
 // stricter version of CSS that passes the Svelte compiler.
 //
 // Note that these files will not undergo a second pass through the vite
@@ -578,27 +619,21 @@ class Root {
 // In practice, it is discouraged to use `@tailwind utilities;` inside Svelte
 // components, as the styles it create would be scoped anyways. Use an external
 // `.css` file instead.
-function svelteProcessor(roots: DefaultMap<string, Root>) {
-  let preprocessor = sveltePreprocess()
-
+function svelteProcessor(roots: DefaultMap<string, Root>): Plugin {
   return {
     name: '@tailwindcss/svelte',
     api: {
       sveltePreprocess: {
-        markup: preprocessor.markup,
-        script: preprocessor.script,
         async style({
           content,
           filename,
           markup,
-          ...rest
         }: {
           content: string
           filename?: string
-          attributes: Record<string, string | boolean>
           markup: string
         }) {
-          if (!filename) return preprocessor.style?.({ ...rest, content, filename, markup })
+          if (!filename) return
 
           // Create the ID used by Vite to identify the `<style>` contents. This
           // way, the Vite `transform` hook can find the right root and thus
@@ -626,15 +661,15 @@ function svelteProcessor(roots: DefaultMap<string, Root>) {
           ])
 
           let generated = await root.generate(content, (file) =>
-            root?.builtBeforeTransform?.push(file),
+            root.builtBeforeTransform?.push(file),
           )
 
           if (!generated) {
             roots.delete(id)
-            return preprocessor.style?.({ ...rest, content, filename, markup })
+            return
           }
 
-          return preprocessor.style?.({ ...rest, content: generated, filename, markup })
+          return { code: generated }
         },
       },
     },

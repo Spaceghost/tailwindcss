@@ -1,6 +1,6 @@
 {
   "name": "@tailwindcss/postcss",
-  "version": "4.0.0-beta.1",
+  "version": "4.0.0-beta.5",
   "description": "PostCSS plugin for Tailwind CSS, a utility-first CSS framework for rapidly building custom user interfaces",
   "license": "MIT",
   "repository": {
@@ -40,6 +40,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/postcss-import": "14.0.3",
+    "dedent": "1.5.3",
     "internal-example-plugin": "workspace:*",
     "postcss-import": "^16.1.0"
   }

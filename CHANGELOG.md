@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet!
 
+## [4.0.0-beta.5] - 2024-12-04
+
+### Added
+
+- Parallelize parsing of individual source files ([#15270](https://github.com/tailwindlabs/tailwindcss/pull/15270))
+- Add new `@import "…" reference` option for importing Tailwind CSS configuration details into another CSS entry point without duplicating CSS ([#15228](https://github.com/tailwindlabs/tailwindcss/pull/15228))
+- Improve performance of `@tailwindcss/postcss` by translating between internal data structures and PostCSS nodes directly without additional parsing or stringification ([#15297](https://github.com/tailwindlabs/tailwindcss/pull/15297))
+
+### Fixed
+
+- Ensure absolute URLs inside imported CSS files are not rebased when using `@tailwindcss/vite` ([#15275](https://github.com/tailwindlabs/tailwindcss/pull/15275))
+- Fix issues with dev servers using Svelte 5 with `@tailwindcss/vite` ([#15274](https://github.com/tailwindlabs/tailwindcss/issues/15274))
+- Support installing `@tailwindcss/vite` in Vite 6 projects ([#15274](https://github.com/tailwindlabs/tailwindcss/issues/15274))
+- Fix resolution of imported CSS files in SSR builds with `@tailwindcss/vite` ([#15279](https://github.com/tailwindlabs/tailwindcss/issues/15279))
+- Ensure other plugins can run after `@tailwindcss/postcss` ([#15273](https://github.com/tailwindlabs/tailwindcss/pull/15273))
+- Rebase URLs inside imported CSS files when using Vite with the `@tailwindcss/postcss` extension ([#15273](https://github.com/tailwindlabs/tailwindcss/pull/15273))
+- Fix missing font family suggestions in IntelliSense ([#15288](https://github.com/tailwindlabs/tailwindcss/pull/15288))
+- Fix missing `@container` suggestion in IntelliSense ([#15288](https://github.com/tailwindlabs/tailwindcss/pull/15288))
+
+## [4.0.0-beta.4] - 2024-11-29
+
+### Fixed
+
+- Don't scan source files for utilities unless `@tailwind utilities` is present in the CSS in `@tailwindcss/postcss` and `@tailwindcss/vite` ([#15226](https://github.com/tailwindlabs/tailwindcss/pull/15226))
+- Skip reserializing CSS files that don't use Tailwind features in `@tailwindcss/postcss` and `@tailwindcss/vite` ([#15226](https://github.com/tailwindlabs/tailwindcss/pull/15226))
+- _Upgrade (experimental)_: Do not migrate the `overflow-clip` utility ([#15244](https://github.com/tailwindlabs/tailwindcss/pull/15244))
+- _Upgrade (experimental)_: Rename `backdrop-blur` to `backdrop-blur-sm` and `backdrop-blur-sm` to `backdrop-blur-xs` ([#15242](https://github.com/tailwindlabs/tailwindcss/pull/15242))
+
+## [4.0.0-beta.3] - 2024-11-27
+
+### Fixed
+
+- Ensure any necessary vendor prefixes are generated for iOS Safari, Firefox, and Chrome ([#15166](https://github.com/tailwindlabs/tailwindcss/pull/15166))
+- Ensure `.group` and `.peer` are prefixed when using the `prefix(…)` option ([#15174](https://github.com/tailwindlabs/tailwindcss/pull/15174))
+- Ensure 3D transforms render correctly in Safari ([#15179](https://github.com/tailwindlabs/tailwindcss/pull/15179))
+- Ensure `--spacing-*` variables take precedence over `--container-*` variables ([#15180](https://github.com/tailwindlabs/tailwindcss/pull/15180))
+- Fix scanning classes delimited by tab characters ([#15169](https://github.com/tailwindlabs/tailwindcss/pull/15169))
+- Ensure opacity modifiers and semi-transparent gradients render correctly by default in Safari ([#15201](https://github.com/tailwindlabs/tailwindcss/pull/15201))
+- Fix element size thrashing when transitioning gradients on elements with a defined font-size in Safari ([#15216](https://github.com/tailwindlabs/tailwindcss/pull/15216))
+- Ensure `translate-*` utilities work with arbitrary values that use `calc(…)` ([#15215](https://github.com/tailwindlabs/tailwindcss/pull/15215))
+- Ensure gradient stop position utilities work with arbitrary values that use `calc(…)` ([#15215](https://github.com/tailwindlabs/tailwindcss/pull/15215))
+- Ensure Node addons are packaged correctly with Windows ARM builds ([#15171](https://github.com/tailwindlabs/tailwindcss/pull/15171))
+- Ensure the Vite plugin resolves CSS and JS files according to the configured resolver conditions ([#15173])(https://github.com/tailwindlabs/tailwindcss/pull/15173)
+- _Upgrade (experimental)_: Migrate prefixes for `.group` and `.peer` classes ([#15208](https://github.com/tailwindlabs/tailwindcss/pull/15208))
+
+### Changed
+
+- Interpolate gradients using OKLAB instead of OKLCH by default ([#15201](https://github.com/tailwindlabs/tailwindcss/pull/15201))
+- Error when `layer(…)` in `@import` is not first in the list of functions/conditions ([#15109](https://github.com/tailwindlabs/tailwindcss/pull/15109))
+- Use unitless line-height values for font-size variables in default theme ([#15216](https://github.com/tailwindlabs/tailwindcss/pull/15216))
+- Don't register custom properties with explicit types unless those custom properties need to be animateable ([#15215](https://github.com/tailwindlabs/tailwindcss/pull/15215))
+
+## [4.0.0-beta.2] - 2024-11-22
+
+### Fixed
+
+- Use configured `--letter-spacing` values for custom font size utilities ([#15099](https://github.com/tailwindlabs/tailwindcss/pull/15099))
+- Ensure `space-x/y-*` and `divide-x/y-*` with variants can undo `space-x/y-reverse` and `divide-x/y-reverse` ([#15094](https://github.com/tailwindlabs/tailwindcss/pull/15094))
+- Don't print minified code when the build fails in the CLI ([#15106](https://github.com/tailwindlabs/tailwindcss/pull/15106))
+- Generate the correct CSS for the `break-keep` utility ([#15108](https://github.com/tailwindlabs/tailwindcss/pull/15108))
+- Detect single word utilities that include numbers (e.g. `h1`) when scanning files ([#15110](https://github.com/tailwindlabs/tailwindcss/pull/15110))
+- _Upgrade (experimental)_: Always add `layer(…)` as the first param to `@import` ([#15102](https://github.com/tailwindlabs/tailwindcss/pull/15102))
+
+### Changed
+
+- Revert the new base styles for buttons and form controls ([#15100](https://github.com/tailwindlabs/tailwindcss/pull/15100))
+
 ## [4.0.0-beta.1] - 2024-11-21
 
 ### Added

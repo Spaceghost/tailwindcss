@@ -1,3 +1,4 @@
+import type { Features } from '..'
 import { substituteAtApply } from '../apply'
 import { atRule, decl, rule, walk, type AstNode } from '../ast'
 import type { Candidate, CandidateModifier, NamedUtilityValue } from '../candidate'
@@ -16,7 +17,13 @@ import * as SelectorParser from './selector-parser'
 
 export type Config = UserConfig
 export type PluginFn = (api: PluginAPI) => void
-export type PluginWithConfig = { handler: PluginFn; config?: UserConfig }
+export type PluginWithConfig = {
+  handler: PluginFn
+  config?: UserConfig
+
+  /** @internal */
+  reference?: boolean
+}
 export type PluginWithOptions<T> = {
   (options?: T): PluginWithConfig
   __isOptionsFunction: true
@@ -83,11 +90,12 @@ export function buildPluginApi(
   designSystem: DesignSystem,
   ast: AstNode[],
   resolvedConfig: ResolvedConfig,
+  featuresRef: { current: Features },
 ): PluginAPI {
   let api: PluginAPI = {
     addBase(css) {
       let baseNodes = objectToAst(css)
-      substituteFunctions(baseNodes, api.theme)
+      featuresRef.current |= substituteFunctions(baseNodes, api.theme)
       ast.push(atRule('@layer', 'base', baseNodes))
     },
 
@@ -260,7 +268,7 @@ export function buildPluginApi(
 
         designSystem.utilities.static(className, () => {
           let clonedAst = structuredClone(ast)
-          substituteAtApply(clonedAst, designSystem)
+          featuresRef.current |= substituteAtApply(clonedAst, designSystem)
           return clonedAst
         })
       }
@@ -382,7 +390,7 @@ export function buildPluginApi(
             }
 
             let ast = objectToAst(fn(value, { modifier }))
-            substituteAtApply(ast, designSystem)
+            featuresRef.current |= substituteAtApply(ast, designSystem)
             return ast
           }
         }

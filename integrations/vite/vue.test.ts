@@ -15,7 +15,7 @@ test(
           "devDependencies": {
             "@vitejs/plugin-vue": "^5.1.2",
             "@tailwindcss/vite": "workspace:^",
-            "vite": "^5.3.5"
+            "vite": "^6"
           }
         }
       `,
@@ -45,15 +45,13 @@ test(
       `,
       'src/App.vue': html`
         <style>
-          @import 'tailwindcss/utilities';
-          @import 'tailwindcss/theme' theme(reference);
+          @import 'tailwindcss' reference;
           .foo {
             @apply text-red-500;
           }
         </style>
         <style scoped>
-          @import 'tailwindcss/utilities';
-          @import 'tailwindcss/theme' theme(reference);
+          @import 'tailwindcss' reference;
           :deep(.bar) {
             color: red;
           }

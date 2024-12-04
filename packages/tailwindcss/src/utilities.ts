@@ -118,7 +118,7 @@ export function withAlpha(value: string, alpha: string): string {
     alpha = `${alphaAsNumber * 100}%`
   }
 
-  return `color-mix(in oklch, ${value} ${alpha}, transparent)`
+  return `color-mix(in oklab, ${value} ${alpha}, transparent)`
 }
 
 /**
@@ -374,7 +374,7 @@ export function createUtilities(theme: Theme) {
 
   function spacingUtility(
     name: string,
-    themeNamespace: ThemeKey | ThemeKey[],
+    themeKeys: ThemeKey[],
     handle: (value: string) => AstNode[] | undefined,
     {
       supportsNegative = false,
@@ -388,7 +388,6 @@ export function createUtilities(theme: Theme) {
       utilities.static(`-${name}-px`, () => handle('-1px'))
     }
     utilities.static(`${name}-px`, () => handle('1px'))
-    let themeKeys = ([] as ThemeKey[]).concat(themeNamespace, '--spacing')
     functionalUtility(name, {
       themeKeys,
       supportsFractions,
@@ -522,7 +521,7 @@ export function createUtilities(theme: Theme) {
     staticUtility(`${name}-auto`, [[property, 'auto']])
     staticUtility(`${name}-full`, [[property, '100%']])
     staticUtility(`-${name}-full`, [[property, '-100%']])
-    spacingUtility(name, '--inset', (value) => [decl(property, value)], {
+    spacingUtility(name, ['--inset', '--spacing'], (value) => [decl(property, value)], {
       supportsNegative: true,
       supportsFractions: true,
     })
@@ -720,8 +719,8 @@ export function createUtilities(theme: Theme) {
   /**
    * @css `float`
    */
-  staticUtility('float-start', [['float', 'start']])
-  staticUtility('float-end', [['float', 'end']])
+  staticUtility('float-start', [['float', 'inline-start']])
+  staticUtility('float-end', [['float', 'inline-end']])
   staticUtility('float-right', [['float', 'right']])
   staticUtility('float-left', [['float', 'left']])
   staticUtility('float-none', [['float', 'none']])
@@ -729,8 +728,8 @@ export function createUtilities(theme: Theme) {
   /**
    * @css `clear`
    */
-  staticUtility('clear-start', [['clear', 'start']])
-  staticUtility('clear-end', [['clear', 'end']])
+  staticUtility('clear-start', [['clear', 'inline-start']])
+  staticUtility('clear-end', [['clear', 'inline-end']])
   staticUtility('clear-right', [['clear', 'right']])
   staticUtility('clear-left', [['clear', 'left']])
   staticUtility('clear-both', [['clear', 'both']])
@@ -751,7 +750,7 @@ export function createUtilities(theme: Theme) {
     ['ml', 'margin-left'],
   ] as const) {
     staticUtility(`${namespace}-auto`, [[property, 'auto']])
-    spacingUtility(namespace, '--margin', (value) => [decl(property, value)], {
+    spacingUtility(namespace, ['--margin', '--spacing'], (value) => [decl(property, value)], {
       supportsNegative: true,
     })
   }
@@ -890,7 +889,7 @@ export function createUtilities(theme: Theme) {
 
   spacingUtility(
     'size',
-    ['--size'],
+    ['--size', '--spacing'],
     (value) => [decl('--tw-sort', 'size'), decl('width', value), decl('height', value)],
     {
       supportsFractions: true,
@@ -898,12 +897,12 @@ export function createUtilities(theme: Theme) {
   )
 
   for (let [name, namespaces, property] of [
-    ['w', ['--width', '--container'], 'width'],
-    ['min-w', ['--min-width', '--container'], 'min-width'],
-    ['max-w', ['--max-width', '--container'], 'max-width'],
-    ['h', ['--height'], 'height'],
-    ['min-h', ['--min-height', '--height'], 'min-height'],
-    ['max-h', ['--max-height', '--height'], 'max-height'],
+    ['w', ['--width', '--spacing', '--container'], 'width'],
+    ['min-w', ['--min-width', '--spacing', '--container'], 'min-width'],
+    ['max-w', ['--max-width', '--spacing', '--container'], 'max-width'],
+    ['h', ['--height', '--spacing'], 'height'],
+    ['min-h', ['--min-height', '--height', '--spacing'], 'min-height'],
+    ['max-h', ['--max-height', '--height', '--spacing'], 'max-height'],
   ] as [string, ThemeKey[], string][]) {
     spacingUtility(name, namespaces, (value) => [decl(property, value)], {
       supportsFractions: true,
@@ -997,9 +996,14 @@ export function createUtilities(theme: Theme) {
    */
   staticUtility('basis-auto', [['flex-basis', 'auto']])
   staticUtility('basis-full', [['flex-basis', '100%']])
-  spacingUtility('basis', ['--flex-basis', '--container'], (value) => [decl('flex-basis', value)], {
-    supportsFractions: true,
-  })
+  spacingUtility(
+    'basis',
+    ['--flex-basis', '--spacing', '--container'],
+    (value) => [decl('flex-basis', value)],
+    {
+      supportsFractions: true,
+    },
+  )
 
   /**
    * @css `table-layout`
@@ -1028,20 +1032,20 @@ export function createUtilities(theme: Theme) {
   /**
    * @css `border-spacing`
    */
-  spacingUtility('border-spacing', ['--border-spacing'], (value) => [
+  spacingUtility('border-spacing', ['--border-spacing', '--spacing'], (value) => [
     borderSpacingProperties(),
     decl('--tw-border-spacing-x', value),
     decl('--tw-border-spacing-y', value),
     decl('border-spacing', 'var(--tw-border-spacing-x) var(--tw-border-spacing-y)'),
   ])
 
-  spacingUtility('border-spacing-x', ['--border-spacing'], (value) => [
+  spacingUtility('border-spacing-x', ['--border-spacing', '--spacing'], (value) => [
     borderSpacingProperties(),
     decl('--tw-border-spacing-x', value),
     decl('border-spacing', 'var(--tw-border-spacing-x) var(--tw-border-spacing-y)'),
   ])
 
-  spacingUtility('border-spacing-y', ['--border-spacing'], (value) => [
+  spacingUtility('border-spacing-y', ['--border-spacing', '--spacing'], (value) => [
     borderSpacingProperties(),
     decl('--tw-border-spacing-y', value),
     decl('border-spacing', 'var(--tw-border-spacing-x) var(--tw-border-spacing-y)'),
@@ -1089,9 +1093,9 @@ export function createUtilities(theme: Theme) {
 
   let translateProperties = () =>
     atRoot([
-      property('--tw-translate-x', '0', '<length> | <percentage>'),
-      property('--tw-translate-y', '0', '<length> | <percentage>'),
-      property('--tw-translate-z', '0', '<length>'),
+      property('--tw-translate-x', '0'),
+      property('--tw-translate-y', '0'),
+      property('--tw-translate-z', '0'),
     ])
 
   /**
@@ -1113,7 +1117,7 @@ export function createUtilities(theme: Theme) {
 
   spacingUtility(
     'translate',
-    ['--translate'],
+    ['--translate', '--spacing'],
     (value) => [
       translateProperties(),
       decl('--tw-translate-x', value),
@@ -1136,7 +1140,7 @@ export function createUtilities(theme: Theme) {
     ])
     spacingUtility(
       `translate-${axis}`,
-      ['--translate'],
+      ['--translate', '--spacing'],
       (value) => [
         translateProperties(),
         decl(`--tw-translate-${axis}`, value),
@@ -1151,7 +1155,7 @@ export function createUtilities(theme: Theme) {
 
   spacingUtility(
     `translate-z`,
-    ['--translate'],
+    ['--translate', '--spacing'],
     (value) => [
       translateProperties(),
       decl(`--tw-translate-z`, value),
@@ -1179,9 +1183,9 @@ export function createUtilities(theme: Theme) {
 
   let scaleProperties = () =>
     atRoot([
-      property('--tw-scale-x', '1', '<number> | <percentage>'),
-      property('--tw-scale-y', '1', '<number> | <percentage>'),
-      property('--tw-scale-z', '1', '<number> | <percentage>'),
+      property('--tw-scale-x', '1'),
+      property('--tw-scale-y', '1'),
+      property('--tw-scale-z', '1'),
     ])
 
   /**
@@ -1317,11 +1321,11 @@ export function createUtilities(theme: Theme) {
 
     let transformProperties = () =>
       atRoot([
-        property('--tw-rotate-x', 'rotateX(0)', '<transform-function>'),
-        property('--tw-rotate-y', 'rotateY(0)', '<transform-function>'),
-        property('--tw-rotate-z', 'rotateZ(0)', '<transform-function>'),
-        property('--tw-skew-x', 'skewX(0)', '<transform-function>'),
-        property('--tw-skew-y', 'skewY(0)', '<transform-function>'),
+        property('--tw-rotate-x', 'rotateX(0)'),
+        property('--tw-rotate-y', 'rotateY(0)'),
+        property('--tw-rotate-z', 'rotateZ(0)'),
+        property('--tw-skew-x', 'skewX(0)'),
+        property('--tw-skew-y', 'skewY(0)'),
       ])
 
     for (let axis of ['x', 'y', 'z']) {
@@ -1615,9 +1619,14 @@ export function createUtilities(theme: Theme) {
     ['scroll-mb', 'scroll-margin-bottom'],
     ['scroll-ml', 'scroll-margin-left'],
   ] as const) {
-    spacingUtility(namespace, '--scroll-margin', (value) => [decl(property, value)], {
-      supportsNegative: true,
-    })
+    spacingUtility(
+      namespace,
+      ['--scroll-margin', '--spacing'],
+      (value) => [decl(property, value)],
+      {
+        supportsNegative: true,
+      },
+    )
   }
 
   /**
@@ -1634,7 +1643,7 @@ export function createUtilities(theme: Theme) {
     ['scroll-pb', 'scroll-padding-bottom'],
     ['scroll-pl', 'scroll-padding-left'],
   ] as const) {
-    spacingUtility(namespace, '--scroll-padding', (value) => [decl(property, value)])
+    spacingUtility(namespace, ['--scroll-padding', '--spacing'], (value) => [decl(property, value)])
   }
 
   staticUtility('list-inside', [['list-style-position', 'inside']])
@@ -1816,18 +1825,19 @@ export function createUtilities(theme: Theme) {
   staticUtility('justify-items-end', [['justify-items', 'end']])
   staticUtility('justify-items-stretch', [['justify-items', 'stretch']])
 
-  spacingUtility('gap', ['--gap'], (value) => [decl('gap', value)])
-  spacingUtility('gap-x', ['--gap'], (value) => [decl('column-gap', value)])
-  spacingUtility('gap-y', ['--gap'], (value) => [decl('row-gap', value)])
+  spacingUtility('gap', ['--gap', '--spacing'], (value) => [decl('gap', value)])
+  spacingUtility('gap-x', ['--gap', '--spacing'], (value) => [decl('column-gap', value)])
+  spacingUtility('gap-y', ['--gap', '--spacing'], (value) => [decl('row-gap', value)])
 
   spacingUtility(
     'space-x',
-    ['--space'],
+    ['--space', '--spacing'],
     (value) => [
-      atRoot([property('--tw-space-x-reverse', '0', '<number>')]),
+      atRoot([property('--tw-space-x-reverse', '0')]),
 
       styleRule(':where(& > :not(:last-child))', [
         decl('--tw-sort', 'row-gap'),
+        decl('--tw-space-x-reverse', '0'),
         decl('margin-inline-start', `calc(${value} * var(--tw-space-x-reverse))`),
         decl('margin-inline-end', `calc(${value} * calc(1 - var(--tw-space-x-reverse)))`),
       ]),
@@ -1837,11 +1847,12 @@ export function createUtilities(theme: Theme) {
 
   spacingUtility(
     'space-y',
-    ['--space'],
+    ['--space', '--spacing'],
     (value) => [
-      atRoot([property('--tw-space-y-reverse', '0', '<number>')]),
+      atRoot([property('--tw-space-y-reverse', '0')]),
       styleRule(':where(& > :not(:last-child))', [
         decl('--tw-sort', 'column-gap'),
+        decl('--tw-space-y-reverse', '0'),
         decl('margin-block-start', `calc(${value} * var(--tw-space-y-reverse))`),
         decl('margin-block-end', `calc(${value} * calc(1 - var(--tw-space-y-reverse)))`),
       ]),
@@ -1850,7 +1861,7 @@ export function createUtilities(theme: Theme) {
   )
 
   staticUtility('space-x-reverse', [
-    () => atRoot([property('--tw-space-x-reverse', '0', '<number>')]),
+    () => atRoot([property('--tw-space-x-reverse', '0')]),
     () =>
       styleRule(':where(& > :not(:last-child))', [
         decl('--tw-sort', 'row-gap'),
@@ -1859,7 +1870,7 @@ export function createUtilities(theme: Theme) {
   ])
 
   staticUtility('space-y-reverse', [
-    () => atRoot([property('--tw-space-y-reverse', '0', '<number>')]),
+    () => atRoot([property('--tw-space-y-reverse', '0')]),
     () =>
       styleRule(':where(& > :not(:last-child))', [
         decl('--tw-sort', 'column-gap'),
@@ -1961,7 +1972,7 @@ export function createUtilities(theme: Theme) {
   ])
   staticUtility('break-words', [['overflow-wrap', 'break-word']])
   staticUtility('break-all', [['word-break', 'break-all']])
-  staticUtility('break-keep', [['word-break', 'break-keep']])
+  staticUtility('break-keep', [['word-break', 'keep-all']])
 
   {
     // border-radius
@@ -2030,7 +2041,7 @@ export function createUtilities(theme: Theme) {
     }
 
     let borderProperties = () => {
-      return atRoot([property('--tw-border-style', 'solid', '<custom-ident>')])
+      return atRoot([property('--tw-border-style', 'solid')])
     }
 
     function borderSideUtility(classRoot: string, desc: BorderDescription) {
@@ -2185,11 +2196,12 @@ export function createUtilities(theme: Theme) {
         return `${value}px`
       },
       handle: (value) => [
-        atRoot([property('--tw-divide-x-reverse', '0', '<number>')]),
+        atRoot([property('--tw-divide-x-reverse', '0')]),
 
         styleRule(':where(& > :not(:last-child))', [
           decl('--tw-sort', 'divide-x-width'),
           borderProperties(),
+          decl('--tw-divide-x-reverse', '0'),
           decl('border-inline-style', 'var(--tw-border-style)'),
           decl('border-inline-start-width', `calc(${value} * var(--tw-divide-x-reverse))`),
           decl('border-inline-end-width', `calc(${value} * calc(1 - var(--tw-divide-x-reverse)))`),
@@ -2205,11 +2217,12 @@ export function createUtilities(theme: Theme) {
         return `${value}px`
       },
       handle: (value) => [
-        atRoot([property('--tw-divide-y-reverse', '0', '<number>')]),
+        atRoot([property('--tw-divide-y-reverse', '0')]),
 
         styleRule(':where(& > :not(:last-child))', [
           decl('--tw-sort', 'divide-y-width'),
           borderProperties(),
+          decl('--tw-divide-y-reverse', '0'),
           decl('border-bottom-style', 'var(--tw-border-style)'),
           decl('border-top-style', 'var(--tw-border-style)'),
           decl('border-top-width', `calc(${value} * var(--tw-divide-y-reverse))`),
@@ -2235,12 +2248,12 @@ export function createUtilities(theme: Theme) {
     ])
 
     staticUtility('divide-x-reverse', [
-      () => atRoot([property('--tw-divide-x-reverse', '0', '<number>')]),
+      () => atRoot([property('--tw-divide-x-reverse', '0')]),
       () => styleRule(':where(& > :not(:last-child))', [decl('--tw-divide-x-reverse', '1')]),
     ])
 
     staticUtility('divide-y-reverse', [
-      () => atRoot([property('--tw-divide-y-reverse', '0', '<number>')]),
+      () => atRoot([property('--tw-divide-y-reverse', '0')]),
       () => styleRule(':where(& > :not(:last-child))', [decl('--tw-divide-y-reverse', '1')]),
     ])
 
@@ -2307,7 +2320,7 @@ export function createUtilities(theme: Theme) {
     ])
 
     function resolveInterpolationModifier(modifier: CandidateModifier | null) {
-      let interpolationMethod = 'in oklch'
+      let interpolationMethod = 'in oklab'
 
       if (modifier?.kind === 'named') {
         switch (modifier.value) {
@@ -2548,9 +2561,9 @@ export function createUtilities(theme: Theme) {
       property('--tw-gradient-to', '#0000', '<color>'),
       property('--tw-gradient-stops'),
       property('--tw-gradient-via-stops'),
-      property('--tw-gradient-from-position', '0%', '<length> | <percentage>'),
-      property('--tw-gradient-via-position', '50%', '<length> | <percentage>'),
-      property('--tw-gradient-to-position', '100%', '<length> | <percentage>'),
+      property('--tw-gradient-from-position', '0%', '<length-percentage>'),
+      property('--tw-gradient-via-position', '50%', '<length-percentage>'),
+      property('--tw-gradient-to-position', '100%', '<length-percentage>'),
     ])
   }
 
@@ -2818,7 +2831,7 @@ export function createUtilities(theme: Theme) {
     ['pb', 'padding-bottom'],
     ['pl', 'padding-left'],
   ] as const) {
-    spacingUtility(name, '--padding', (value) => [decl(property, value)])
+    spacingUtility(name, ['--padding', '--spacing'], (value) => [decl(property, value)])
   }
 
   staticUtility('text-left', [['text-align', 'left']])
@@ -2828,9 +2841,14 @@ export function createUtilities(theme: Theme) {
   staticUtility('text-start', [['text-align', 'start']])
   staticUtility('text-end', [['text-align', 'end']])
 
-  spacingUtility('indent', ['--text-indent'], (value) => [decl('text-indent', value)], {
-    supportsNegative: true,
-  })
+  spacingUtility(
+    'indent',
+    ['--text-indent', '--spacing'],
+    (value) => [decl('text-indent', value)],
+    {
+      supportsNegative: true,
+    },
+  )
 
   staticUtility('align-baseline', [['vertical-align', 'baseline']])
   staticUtility('align-top', [['vertical-align', 'top']])
@@ -2901,7 +2919,7 @@ export function createUtilities(theme: Theme) {
   suggest('font', () => [
     {
       values: [],
-      valueThemeKeys: ['--font-family'],
+      valueThemeKeys: ['--font'],
     },
     {
       values: [
@@ -3723,7 +3741,7 @@ export function createUtilities(theme: Theme) {
     ['--tw-leading', '1'],
     ['line-height', '1'],
   ])
-  spacingUtility('leading', ['--leading'], (value) => [
+  spacingUtility('leading', ['--leading', '--spacing'], (value) => [
     atRoot([property('--tw-leading')]),
     decl('--tw-leading', value),
     decl('line-height', value),
@@ -3815,7 +3833,7 @@ export function createUtilities(theme: Theme) {
 
   {
     let outlineProperties = () => {
-      return atRoot([property('--tw-outline-style', 'solid', '<custom-ident>')])
+      return atRoot([property('--tw-outline-style', 'solid')])
     }
 
     staticUtility('outline-hidden', [
@@ -4033,7 +4051,7 @@ export function createUtilities(theme: Theme) {
       let value = theme.resolveWith(
         candidate.value.value,
         ['--text'],
-        ['--line-height', '--tracking', '--font-weight'],
+        ['--line-height', '--letter-spacing', '--font-weight'],
       )
       if (value) {
         let [fontSize, options = {}] = Array.isArray(value) ? value : [value]
@@ -4067,7 +4085,9 @@ export function createUtilities(theme: Theme) {
           ),
           decl(
             'letter-spacing',
-            options['--tracking'] ? `var(--tw-tracking, ${options['--tracking']})` : undefined,
+            options['--letter-spacing']
+              ? `var(--tw-tracking, ${options['--letter-spacing']})`
+              : undefined,
           ),
           decl(
             'font-weight',
@@ -4544,7 +4564,7 @@ export function createUtilities(theme: Theme) {
     {
       values: ['normal'],
       valueThemeKeys: [],
-      hasDefaultValue: false,
+      hasDefaultValue: true,
     },
   ])
 

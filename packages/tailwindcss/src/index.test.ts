@@ -151,6 +151,23 @@ describe('compiling CSS', () => {
       }"
     `)
   })
+
+  test('adds vendor prefixes', async () => {
+    expect(
+      await compileCss(
+        css`
+          @tailwind utilities;
+        `,
+        ['[text-size-adjust:none]'],
+      ),
+    ).toMatchInlineSnapshot(`
+      ".\\[text-size-adjust\\:none\\] {
+        -webkit-text-size-adjust: none;
+        -moz-text-size-adjust: none;
+        text-size-adjust: none;
+      }"
+    `)
+  })
 })
 
 describe('arbitrary properties', () => {
@@ -165,7 +182,7 @@ describe('arbitrary properties', () => {
   it('should generate arbitrary properties with modifiers', async () => {
     expect(await run(['[color:red]/50'])).toMatchInlineSnapshot(`
       ".\\[color\\:red\\]\\/50 {
-        color: oklch(62.7955% .257683 29.2339 / .5);
+        color: oklab(62.7955% .22486 .12584 / .5);
       }"
     `)
   })
@@ -177,7 +194,7 @@ describe('arbitrary properties', () => {
   it('should generate arbitrary properties with variables and with modifiers', async () => {
     expect(await run(['[color:var(--my-color)]/50'])).toMatchInlineSnapshot(`
       ".\\[color\\:var\\(--my-color\\)\\]\\/50 {
-        color: color-mix(in oklch, var(--my-color) 50%, transparent);
+        color: color-mix(in oklab, var(--my-color) 50%, transparent);
       }"
     `)
   })
@@ -285,19 +302,19 @@ describe('@apply', () => {
       }
 
       @property --tw-translate-x {
-        syntax: "<length> | <percentage>";
+        syntax: "*";
         inherits: false;
         initial-value: 0;
       }
 
       @property --tw-translate-y {
-        syntax: "<length> | <percentage>";
+        syntax: "*";
         inherits: false;
         initial-value: 0;
       }
 
       @property --tw-translate-z {
-        syntax: "<length>";
+        syntax: "*";
         inherits: false;
         initial-value: 0;
       }"
@@ -686,6 +703,7 @@ describe('sorting', () => {
       }
 
       :where(.space-x-2 > :not(:last-child)) {
+        --tw-space-x-reverse: 0;
         margin-inline-start: calc(var(--spacing-2) * var(--tw-space-x-reverse));
         margin-inline-end: calc(var(--spacing-2) * calc(1 - var(--tw-space-x-reverse)));
       }
@@ -699,7 +717,7 @@ describe('sorting', () => {
       }
 
       @property --tw-space-x-reverse {
-        syntax: "<number>";
+        syntax: "*";
         inherits: false;
         initial-value: 0;
       }"
@@ -3044,4 +3062,115 @@ test('addBase', async () => {
       }
     }"
   `)
+})
+
+it("should error when `layer(…)` is used, but it's not the first param", async () => {
+  expect(async () => {
+    return await compileCss(
+      css`
+        @import './bar.css' supports(display: grid) layer(utilities);
+      `,
+      [],
+      {
+        async loadStylesheet() {
+          return {
+            base: '/bar.css',
+            content: css`
+              .foo {
+                @apply underline;
+              }
+            `,
+          }
+        },
+      },
+    )
+  }).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: \`layer(…)\` in an \`@import\` should come before any other functions or conditions]`,
+  )
+})
+
+describe('`@import "…" reference`', () => {
+  test('recursively removes styles', async () => {
+    let loadStylesheet = async (id: string, base: string) => {
+      if (id === './foo/baz.css') {
+        return {
+          content: css`
+            .foo {
+              color: red;
+            }
+            @utility foo {
+              color: red;
+            }
+            @theme {
+              --breakpoint-md: 768px;
+            }
+            @variant hocus (&:hover, &:focus);
+          `,
+          base: '/root/foo',
+        }
+      }
+      return {
+        content: css`
+          @import './foo/baz.css';
+        `,
+        base: '/root/foo',
+      }
+    }
+
+    await expect(
+      compileCss(
+        `
+          @import './foo/bar.css' reference;
+
+          .bar {
+            @apply md:hocus:foo;
+          }
+        `,
+        [],
+        { loadStylesheet },
+      ),
+    ).resolves.toMatchInlineSnapshot(`
+      "@media (width >= 768px) {
+        .bar:hover, .bar:focus {
+          color: red;
+        }
+      }"
+    `)
+  })
+
+  test('removes styles when the import resolver was handled outside of Tailwind CSS', async () => {
+    await expect(
+      compileCss(
+        `
+          @media reference {
+            @layer theme {
+              @theme {
+                --breakpoint-md: 48rem;
+              }
+              .foo {
+                color: red;
+              }
+            }
+            @utility foo {
+              color: red;
+            }
+            @variant hocus (&:hover, &:focus);
+          }
+
+          .bar {
+            @apply md:hocus:foo;
+          }
+        `,
+        [],
+      ),
+    ).resolves.toMatchInlineSnapshot(`
+      "@layer theme;
+
+      @media (width >= 48rem) {
+        .bar:hover, .bar:focus {
+          color: red;
+        }
+      }"
+    `)
+  })
 })

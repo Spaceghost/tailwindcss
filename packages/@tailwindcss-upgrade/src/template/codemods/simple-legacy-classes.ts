@@ -5,7 +5,6 @@ import { printCandidate } from '../candidates'
 // Classes that used to exist in Tailwind CSS v3, but do not exist in Tailwind
 // CSS v4 anymore.
 const LEGACY_CLASS_MAP = {
-  'overflow-clip': 'text-clip',
   'overflow-ellipsis': 'text-ellipsis',
 
   'flex-grow': 'grow',
@@ -19,7 +18,7 @@ const LEGACY_CLASS_MAP = {
   'outline-none': 'outline-hidden',
 }
 
-const SEEDED = new WeakSet<DesignSystem>()
+let seenDesignSystems = new WeakSet<DesignSystem>()
 
 export function simpleLegacyClasses(
   designSystem: DesignSystem,
@@ -27,11 +26,11 @@ export function simpleLegacyClasses(
   rawCandidate: string,
 ): string {
   // Prepare design system with the unknown legacy classes
-  if (!SEEDED.has(designSystem)) {
+  if (!seenDesignSystems.has(designSystem)) {
     for (let old in LEGACY_CLASS_MAP) {
       designSystem.utilities.static(old, () => [])
     }
-    SEEDED.add(designSystem)
+    seenDesignSystems.add(designSystem)
   }
 
   for (let candidate of designSystem.parseCandidate(rawCandidate)) {

@@ -7,29 +7,41 @@ import { pathToFileURL } from 'node:url'
 import {
   __unstable__loadDesignSystem as ___unstable__loadDesignSystem,
   compile as _compile,
+  compileAst as _compileAst,
+  Features,
 } from 'tailwindcss'
+import type { AstNode } from '../../tailwindcss/src/ast'
 import { getModuleDependencies } from './get-module-dependencies'
 import { rewriteUrls } from './urls'
 
-export async function compile(
-  css: string,
-  {
+export { Features }
+
+export type Resolver = (id: string, base: string) => Promise<string | false | undefined>
+
+export interface CompileOptions {
+  base: string
+  onDependency: (path: string) => void
+  shouldRewriteUrls?: boolean
+
+  customCssResolver?: Resolver
+  customJsResolver?: Resolver
+}
+
+function createCompileOptions({
+  base,
+  onDependency,
+  shouldRewriteUrls,
+
+  customCssResolver,
+  customJsResolver,
+}: CompileOptions) {
+  return {
     base,
-    onDependency,
-    shouldRewriteUrls,
-  }: {
-    base: string
-    onDependency: (path: string) => void
-    shouldRewriteUrls?: boolean
-  },
-) {
-  let compiler = await _compile(css, {
-    base,
-    async loadModule(id, base) {
-      return loadModule(id, base, onDependency)
+    async loadModule(id: string, base: string) {
+      return loadModule(id, base, onDependency, customJsResolver)
     },
-    async loadStylesheet(id, base) {
-      let sheet = await loadStylesheet(id, base, onDependency)
+    async loadStylesheet(id: string, base: string) {
+      let sheet = await loadStylesheet(id, base, onDependency, customCssResolver)
 
       if (shouldRewriteUrls) {
         sheet.content = await rewriteUrls({
@@ -41,8 +53,13 @@ export async function compile(
 
       return sheet
     },
-  })
+  }
+}
 
+async function ensureSourceDetectionRootExists(
+  compiler: { root: Awaited<ReturnType<typeof compile>>['root'] },
+  base: string,
+) {
   // Verify if the `source(…)` path exists (until the glob pattern starts)
   if (compiler.root && compiler.root !== 'none') {
     let globSymbols = /[*{]/
@@ -64,7 +81,17 @@ export async function compile(
       throw new Error(`The \`source(${compiler.root.pattern})\` does not exist`)
     }
   }
+}
 
+export async function compileAst(ast: AstNode[], options: CompileOptions) {
+  let compiler = await _compileAst(ast, createCompileOptions(options))
+  await ensureSourceDetectionRootExists(compiler, options.base)
+  return compiler
+}
+
+export async function compile(css: string, options: CompileOptions) {
+  let compiler = await _compile(css, createCompileOptions(options))
+  await ensureSourceDetectionRootExists(compiler, options.base)
   return compiler
 }
 
@@ -80,9 +107,14 @@ export async function __unstable__loadDesignSystem(css: string, { base }: { base
   })
 }
 
-export async function loadModule(id: string, base: string, onDependency: (path: string) => void) {
+export async function loadModule(
+  id: string,
+  base: string,
+  onDependency: (path: string) => void,
+  customJsResolver?: Resolver,
+) {
   if (id[0] !== '.') {
-    let resolvedPath = await resolveJsId(id, base)
+    let resolvedPath = await resolveJsId(id, base, customJsResolver)
     if (!resolvedPath) {
       throw new Error(`Could not resolve '${id}' from '${base}'`)
     }
@@ -94,7 +126,7 @@ export async function loadModule(id: string, base: string, onDependency: (path: 
     }
   }
 
-  let resolvedPath = await resolveJsId(id, base)
+  let resolvedPath = await resolveJsId(id, base, customJsResolver)
   if (!resolvedPath) {
     throw new Error(`Could not resolve '${id}' from '${base}'`)
   }
@@ -113,8 +145,13 @@ export async function loadModule(id: string, base: string, onDependency: (path: 
   }
 }
 
-async function loadStylesheet(id: string, base: string, onDependency: (path: string) => void) {
-  let resolvedPath = await resolveCssId(id, base)
+async function loadStylesheet(
+  id: string,
+  base: string,
+  onDependency: (path: string) => void,
+  cssResolver?: Resolver,
+) {
+  let resolvedPath = await resolveCssId(id, base, cssResolver)
   if (!resolvedPath) throw new Error(`Could not resolve '${id}' from '${base}'`)
 
   onDependency(resolvedPath)
@@ -163,11 +200,22 @@ const cssResolver = EnhancedResolve.ResolverFactory.createResolver({
   mainFields: ['style'],
   conditionNames: ['style'],
 })
-async function resolveCssId(id: string, base: string): Promise<string | false | undefined> {
+async function resolveCssId(
+  id: string,
+  base: string,
+  customCssResolver?: Resolver,
+): Promise<string | false | undefined> {
   if (typeof globalThis.__tw_resolve === 'function') {
     let resolved = globalThis.__tw_resolve(id, base)
     if (resolved) {
       return Promise.resolve(resolved)
+    }
+  }
+
+  if (customCssResolver) {
+    let customResolution = await customCssResolver(id, base)
+    if (customResolution) {
+      return customResolution
     }
   }
 
@@ -188,13 +236,25 @@ const cjsResolver = EnhancedResolve.ResolverFactory.createResolver({
   conditionNames: ['node', 'require'],
 })
 
-function resolveJsId(id: string, base: string): Promise<string | false | undefined> {
+async function resolveJsId(
+  id: string,
+  base: string,
+  customJsResolver?: Resolver,
+): Promise<string | false | undefined> {
   if (typeof globalThis.__tw_resolve === 'function') {
     let resolved = globalThis.__tw_resolve(id, base)
     if (resolved) {
       return Promise.resolve(resolved)
     }
   }
+
+  if (customJsResolver) {
+    let customResolution = await customJsResolver(id, base)
+    if (customResolution) {
+      return customResolution
+    }
+  }
+
   return runResolver(esmResolver, id, base).catch(() => runResolver(cjsResolver, id, base))
 }
 
